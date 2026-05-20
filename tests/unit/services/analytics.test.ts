@@ -413,7 +413,7 @@ describe('Analytics Service', () => {
       const employees = Array.from({ length: 5000 }, (_, i) => ({
         id: i.toString(),
         status: i % 50 === 0 ? 'TERMINATED' : 'ACTIVE',
-        department: \`Dept\${i % 20}\`,
+        department: `Dept${i % 20}`,
       }));
 
       const activeCount = calculateHeadcount(employees, 'ACTIVE');
