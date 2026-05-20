@@ -1,7 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  swcMinify: true,
   async headers() {
     return [{
       source: '/(.*)',
@@ -15,10 +14,7 @@ const nextConfig = {
       ],
     }];
   },
-  experimental: {
-    serverComponentsExternalPackages: ['pdfjs-dist'],
-    instrumentationHook: true,
-  },
+  serverExternalPackages: ['pdfjs-dist'],
   webpack: (config, { isServer }) => {
     // pdfjs-dist uses canvas for node.js rendering — not needed in browser
     config.resolve.alias.canvas = false;
