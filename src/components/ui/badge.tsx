@@ -6,11 +6,11 @@ const badgeVariants = cva("inline-flex items-center rounded-full border px-2.5 p
   variants: {
     variant: {
       default: "border-transparent bg-primary-500 text-white",
-      secondary: "border-transparent bg-gray-100 text-gray-900",
+      secondary: "border-transparent bg-gray-100 text-gray-900 dark:bg-charcoal-700 dark:text-white",
       destructive: "border-transparent bg-red-500 text-white",
-      outline: "text-gray-700",
-      success: "border-transparent bg-green-100 text-green-800",
-      warning: "border-transparent bg-yellow-100 text-yellow-800",
+      outline: "text-gray-700 dark:text-gray-300 dark:border-charcoal-700",
+      success: "border-transparent bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100",
+      warning: "border-transparent bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-100",
     },
   },
   defaultVariants: { variant: "default" },

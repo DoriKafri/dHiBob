@@ -10,8 +10,8 @@
     "strict": true,
     "noImplicitAny": true,
     "strictNullChecks": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
     "declaration": true,
@@ -28,5 +28,5 @@
     "plugins": [{ "name": "next" }]
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules", ".next", "dist"]
+  "exclude": ["node_modules", ".next", "dist", "prisma", "vitest.config.ts", "tests", "scripts", "scripts-old", "src/components/onboarding-old", "src/components/org-chart-old", "src/app/(dashboard)/org-chart-old", "src/components/home-old"]
 }

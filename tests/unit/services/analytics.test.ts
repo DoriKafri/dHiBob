@@ -18,7 +18,7 @@ function calculateGrowthRate(currentHeadcount: number, previousHeadcount: number
 function calculateAttritionRate(
   terminatedCount: number,
   avgHeadcount: number,
-  months: number = 12
+  _months: number = 12
 ): number {
   if (avgHeadcount === 0) return 0;
   const rate = (terminatedCount / avgHeadcount) * 100;
@@ -108,7 +108,7 @@ function calculateDiversityMetrics(
 function calculateHiringRate(
   newHiresCount: number,
   avgHeadcount: number,
-  months: number = 12
+  _months: number = 12
 ): number {
   if (avgHeadcount === 0) return 0;
   const rate = (newHiresCount / avgHeadcount) * 100;
@@ -413,7 +413,7 @@ describe('Analytics Service', () => {
       const employees = Array.from({ length: 5000 }, (_, i) => ({
         id: i.toString(),
         status: i % 50 === 0 ? 'TERMINATED' : 'ACTIVE',
-        department: \`Dept\${i % 20}\`,
+        department: `Dept${i % 20}`,
       }));
 
       const activeCount = calculateHeadcount(employees, 'ACTIVE');

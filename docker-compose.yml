@@ -1,0 +1,44 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: dhibob
+      POSTGRES_USER: dhibob
+      POSTGRES_PASSWORD: dhibob_secret
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dhibob -d dhibob"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgresql://dhibob:dhibob_secret@postgres:5432/dhibob"
+      REDIS_URL: "redis://redis:6379"
+      NEXTAUTH_SECRET: "docker-dev-secret-change-in-production"
+      NEXTAUTH_URL: "http://localhost:3000"
+      NODE_ENV: "production"
+
+volumes:
+  pg-data:
+  redis-data:

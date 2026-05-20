@@ -7,9 +7,9 @@ const buttonVariants = cva("inline-flex items-center justify-center rounded-md t
     variant: {
       default: "bg-primary-500 text-white hover:bg-primary-600",
       destructive: "bg-red-500 text-white hover:bg-red-600",
-      outline: "border border-gray-300 bg-white hover:bg-gray-100",
-      secondary: "bg-gray-100 text-gray-900 hover:bg-gray-200",
-      ghost: "hover:bg-gray-100 hover:text-gray-900",
+      outline: "border border-gray-300 bg-white hover:bg-gray-100 dark:border-charcoal-700 dark:bg-charcoal-800 dark:hover:bg-charcoal-700 dark:text-white",
+      secondary: "bg-gray-100 text-gray-900 hover:bg-gray-200 dark:bg-charcoal-700 dark:text-white dark:hover:bg-charcoal-600",
+      ghost: "hover:bg-gray-100 hover:text-gray-900 dark:hover:bg-charcoal-800 dark:hover:text-white dark:text-gray-300",
       link: "text-primary-500 underline-offset-4 hover:underline",
     },
     size: {

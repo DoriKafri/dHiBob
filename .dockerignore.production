@@ -1,0 +1,44 @@
+# Build output + deps (rebuilt inside Docker)
+.next/
+node_modules/
+
+# Environment + secrets
+.env
+.env.*
+!.env.example
+
+# Development artifacts
+*.db
+coverage/
+.DS_Store
+.worktrees/
+tsconfig.tsbuildinfo
+
+# Tests (not needed in production image)
+tests/
+vitest.config.ts
+vitest.setup.ts
+
+# Docs + planning
+docs/
+*.md
+!README.md
+
+# Infrastructure (not part of the app image)
+infra/
+
+# Old/unused code
+scripts-old/
+src/components/onboarding-old/
+src/components/org-chart-old/
+src/app/(dashboard)/org-chart-old/
+src/components/home-old/
+
+# Media (reference screenshots, not served by the app)
+src/pictures/
+termination-report.xlsx
+repo.bundle
+
+# Git
+.git/
+.gitignore

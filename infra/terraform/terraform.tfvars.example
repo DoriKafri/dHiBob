@@ -1,0 +1,44 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored.
+# The example below assumes the Develeap sandbox account 695296766764.
+
+# ---------------------------------------------------------------------
+# REQUIRED
+# ---------------------------------------------------------------------
+
+# Your current public IP, in CIDR form. Only this IP can SSH to the EC2.
+# Get it with: curl -s https://checkip.amazonaws.com
+admin_cidr = "X.X.X.X/32"
+
+# EC2 key pair name (must already exist in us-east-1).
+# Create one with:
+#   aws ec2 create-key-pair --key-name dhibob-deploy \
+#     --query KeyMaterial --output text > ~/.ssh/dhibob-deploy.pem
+#   chmod 400 ~/.ssh/dhibob-deploy.pem
+key_pair_name = "dhibob-deploy"
+
+# ---------------------------------------------------------------------
+# DOMAIN (sandbox / HR-testing path — nip.io, zero extra steps)
+# ---------------------------------------------------------------------
+#
+# Terraform allocates the Elastic IP before creating the EC2, so it knows
+# the public IP at plan time. It bakes "<ip-with-dashes>.nip.io" into
+# cloud-init, the instance waits for the EIP to attach, and Caddy gets a
+# real Let's Encrypt cert for that hostname on first boot. One apply, done.
+
+use_route53          = false
+site_domain_override = ""   # leave blank to auto-derive from the EIP
+
+# ---------------------------------------------------------------------
+# DOMAIN (production path — when you have a real domain in Route 53)
+# ---------------------------------------------------------------------
+# use_route53 = true
+# domain_name = "your-develeap-domain.com"
+# subdomain   = "app"      # results in app.your-develeap-domain.com
+
+# ---------------------------------------------------------------------
+# REPO
+# ---------------------------------------------------------------------
+# EC2 clones this repo and builds the image in place via `docker compose
+# up -d --build` — no registry needed.
+repo_url    = "https://github.com/AndiShobash/dHiBob.git"
+repo_branch = "main"

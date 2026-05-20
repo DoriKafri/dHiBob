@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+    branches: [main]
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPO: 695296766764.dkr.ecr.us-east-1.amazonaws.com/dhibob
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: dhibob_test
+          POSTGRES_USER: dhibob
+          POSTGRES_PASSWORD: dhibob_secret
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dhibob"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://dhibob:dhibob_secret@localhost:5432/dhibob_test
+      TEST_DATABASE_URL: postgresql://dhibob:dhibob_secret@localhost:5432/dhibob_test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Test
+        run: npm run test
+
+      - name: Build
+        run: npm run build
+
+  # Build and push Docker image to ECR (only on main)
+  docker:
+    runs-on: ubuntu-latest
+    needs: ci
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Log in to ECR
+        run: aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 695296766764.dkr.ecr.us-east-1.amazonaws.com
+
+      - name: Build and push Docker image
+        run: |
+          docker build -t $ECR_REPO:latest -t $ECR_REPO:${{ github.sha }} .
+          docker push $ECR_REPO:latest
+          docker push $ECR_REPO:${{ github.sha }}

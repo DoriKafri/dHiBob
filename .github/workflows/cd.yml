@@ -1,0 +1,76 @@
+name: CD
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    permissions:
+      id-token: write
+      contents: read
+
+    env:
+      SG_ID: sg-07ea36c7bf5e59f5c
+
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Get runner IP
+        id: ip
+        run: echo "ip=$(curl -s https://checkip.amazonaws.com)" >> $GITHUB_OUTPUT
+
+      - name: Open SSH for runner IP
+        run: |
+          aws ec2 authorize-security-group-ingress \
+            --group-id "$SG_ID" \
+            --protocol tcp \
+            --port 22 \
+            --cidr "${{ steps.ip.outputs.ip }}/32"
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd ~/dhibob
+            git pull --ff-only origin main
+
+            # Keep pull-secrets.sh in sync with repo
+            cp scripts/pull-secrets.sh ~/pull-secrets.sh
+
+            # Refresh .env from Secrets Manager
+            ~/pull-secrets.sh
+
+            # Pull pre-built image from ECR (EC2 instance profile has pull access)
+            aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 695296766764.dkr.ecr.us-east-1.amazonaws.com
+            docker pull 695296766764.dkr.ecr.us-east-1.amazonaws.com/dhibob:latest
+            docker tag 695296766764.dkr.ecr.us-east-1.amazonaws.com/dhibob:latest dhibob-app:local
+
+            docker compose -f docker-compose.prod.yml up -d
+            docker image prune -f
+            echo "Deploy done."
+
+      - name: Revoke SSH for runner IP
+        if: always()
+        run: |
+          aws ec2 revoke-security-group-ingress \
+            --group-id "$SG_ID" \
+            --protocol tcp \
+            --port 22 \
+            --cidr "${{ steps.ip.outputs.ip }}/32"

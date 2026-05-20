@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 vi.mock('@/server/db', () => ({
   prisma: { employee: { create: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn(), findFirst: vi.fn(), count: vi.fn() } },

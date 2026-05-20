@@ -1,0 +1,172 @@
+#!/bin/bash
+# cloud-init user_data for the Dpeople EC2. Run once on first boot.
+# Templated via Terraform — do not hard-code values; let templatefile() fill them.
+
+set -euxo pipefail
+
+APP_DIR=/home/ec2-user/dhibob
+SITE_DOMAIN="${site_domain}"
+SECRET_ARN="${secret_arn}"
+AWS_REGION="${aws_region}"
+
+# --- 2 GB swap ------------------------------------------------------
+# t3.micro only has 1 GB RAM. `next build` can OOM without swap. Swap
+# file lives on the root EBS volume — free, just disk, and idle when
+# RAM is plentiful.
+if [ ! -f /swapfile ]; then
+  fallocate -l 2G /swapfile
+  chmod 600 /swapfile
+  mkswap /swapfile
+  swapon /swapfile
+  echo '/swapfile none swap sw 0 0' >> /etc/fstab
+fi
+
+# --- System packages -------------------------------------------------
+dnf update -y
+dnf install -y docker git awscli cronie jq
+systemctl enable --now docker
+systemctl enable --now crond
+usermod -aG docker ec2-user
+
+# docker compose v2 + buildx plugins (cli-plugins path). Amazon Linux 2023
+# ships Docker without a recent-enough buildx, which `docker compose build`
+# requires (compose calls buildx 0.17+ for build orchestration).
+mkdir -p /usr/libexec/docker/cli-plugins
+curl -sSL \
+  https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 \
+  -o /usr/libexec/docker/cli-plugins/docker-compose
+chmod +x /usr/libexec/docker/cli-plugins/docker-compose
+curl -sSL \
+  https://github.com/docker/buildx/releases/latest/download/buildx-v0.19.2.linux-amd64 \
+  -o /usr/libexec/docker/cli-plugins/docker-buildx
+chmod +x /usr/libexec/docker/cli-plugins/docker-buildx
+
+# --- Application checkout --------------------------------------------
+sudo -u ec2-user bash -c "git clone --branch ${repo_branch} ${repo_url} $APP_DIR"
+
+# --- Pull secrets from Secrets Manager --------------------------------
+# Reusable script that the CD pipeline can also call on each deploy.
+cat > /home/ec2-user/pull-secrets.sh <<'PULLSECRETS'
+#!/bin/bash
+set -euo pipefail
+APP_DIR=/home/ec2-user/dhibob
+PULLSECRETS
+
+# Inject template variables into the script (outside the heredoc)
+cat >> /home/ec2-user/pull-secrets.sh <<EOF
+SECRET_ARN="$SECRET_ARN"
+AWS_REGION="$AWS_REGION"
+SITE_DOMAIN="$SITE_DOMAIN"
+S3_BUCKET="${s3_bucket}"
+EOF
+
+cat >> /home/ec2-user/pull-secrets.sh <<'PULLSECRETS'
+SECRETS_JSON=$(aws secretsmanager get-secret-value \
+  --secret-id "$SECRET_ARN" \
+  --region "$AWS_REGION" \
+  --query SecretString --output text)
+
+PG_PASS=$(echo "$SECRETS_JSON" | jq -r '.POSTGRES_PASSWORD')
+NA_SECRET=$(echo "$SECRETS_JSON" | jq -r '.NEXTAUTH_SECRET')
+S3_KEY=$(echo "$SECRETS_JSON" | jq -r '.S3_ACCESS_KEY_ID')
+S3_SEC=$(echo "$SECRETS_JSON" | jq -r '.S3_SECRET_ACCESS_KEY')
+RESEND=$(echo "$SECRETS_JSON" | jq -r '.RESEND_API_KEY // empty')
+SLACK=$(echo "$SECRETS_JSON" | jq -r '.SLACK_BOT_TOKEN // empty')
+GOOGLE_ID=$(echo "$SECRETS_JSON" | jq -r '.GOOGLE_CLIENT_ID // empty')
+GOOGLE_SEC=$(echo "$SECRETS_JSON" | jq -r '.GOOGLE_CLIENT_SECRET // empty')
+
+cat > "$APP_DIR/.env" <<ENVEOF
+POSTGRES_DB=dhibob
+POSTGRES_USER=dhibob
+POSTGRES_PASSWORD=$PG_PASS
+
+DATABASE_URL=postgresql://dhibob:$PG_PASS@postgres:5432/dhibob
+REDIS_URL=redis://redis:6379
+
+NEXTAUTH_SECRET=$NA_SECRET
+NEXTAUTH_URL=https://$SITE_DOMAIN
+NEXT_PUBLIC_APP_URL=https://$SITE_DOMAIN
+SITE_DOMAIN=$SITE_DOMAIN
+
+STORAGE_DRIVER=s3
+S3_BUCKET=$S3_BUCKET
+AWS_REGION=$AWS_REGION
+S3_ACCESS_KEY_ID=$S3_KEY
+S3_SECRET_ACCESS_KEY=$S3_SEC
+
+RESEND_API_KEY=$RESEND
+NOTIFICATION_FROM_EMAIL=Dpeople <notifications@develeap.com>
+SLACK_BOT_TOKEN=$SLACK
+
+GOOGLE_CLIENT_ID=$GOOGLE_ID
+GOOGLE_CLIENT_SECRET=$GOOGLE_SEC
+
+NODE_ENV=production
+ENVEOF
+
+chmod 600 "$APP_DIR/.env"
+chown ec2-user:ec2-user "$APP_DIR/.env"
+echo "Secrets pulled from Secrets Manager."
+PULLSECRETS
+chmod +x /home/ec2-user/pull-secrets.sh
+chown ec2-user:ec2-user /home/ec2-user/pull-secrets.sh
+
+# Generate .env from Secrets Manager
+/home/ec2-user/pull-secrets.sh
+
+# --- Backup script ---------------------------------------------------
+cat > /home/ec2-user/backup.sh <<'BACKUP'
+#!/bin/bash
+set -euo pipefail
+cd /home/ec2-user/dhibob
+source .env
+TS=$(date +%Y-%m-%d-%H%M)
+docker compose -f docker-compose.prod.yml exec -T postgres \
+  pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" \
+  | gzip \
+  | AWS_ACCESS_KEY_ID="$S3_ACCESS_KEY_ID" \
+    AWS_SECRET_ACCESS_KEY="$S3_SECRET_ACCESS_KEY" \
+    aws s3 cp - "s3://$S3_BUCKET/backups/dhibob-$TS.sql.gz" --region "$AWS_REGION"
+BACKUP
+chmod +x /home/ec2-user/backup.sh
+chown ec2-user:ec2-user /home/ec2-user/backup.sh
+
+# Nightly backup at 03:15 UTC. `crontab -l` exits non-zero when no crontab
+# exists yet — swallow that so `set -e` doesn't abort the rest of boot.
+(sudo -u ec2-user crontab -l 2>/dev/null || true; echo "15 3 * * * /home/ec2-user/backup.sh >> /home/ec2-user/backup.log 2>&1") \
+  | sudo -u ec2-user crontab -
+
+# --- Wait for the Elastic IP to attach -------------------------------
+# Caddy asks Let's Encrypt for a cert on first boot. LE resolves DNS for
+# $SITE_DOMAIN → EIP, then hits the ACME HTTP-01 challenge on :80. That
+# only works once the EIP is routed to this instance, which happens a
+# few seconds after the instance enters "running" state. Poll IMDS until
+# our public IP matches the expected EIP before booting the stack.
+EXPECTED_PUBLIC_IP="${expected_public_ip}"
+if [ -n "$EXPECTED_PUBLIC_IP" ]; then
+  echo "Waiting for Elastic IP $EXPECTED_PUBLIC_IP to attach..."
+  for i in $(seq 1 60); do
+    IMDS_TOKEN=$(curl -sS -X PUT "http://169.254.169.254/latest/api/token" \
+      -H "X-aws-ec2-metadata-token-ttl-seconds: 300" || true)
+    CURRENT_IP=$(curl -sS -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" \
+      http://169.254.169.254/latest/meta-data/public-ipv4 || true)
+    if [ "$CURRENT_IP" = "$EXPECTED_PUBLIC_IP" ]; then
+      echo "Elastic IP attached after $((i * 2))s — public IP is $CURRENT_IP"
+      break
+    fi
+    sleep 2
+  done
+fi
+
+# --- Boot the stack --------------------------------------------------
+# Build the app image from the cloned repo (no registry), then start.
+# `up -d --build` builds, then starts everything. First build takes
+# ~5–8 min (npm ci + next build); subsequent boots reuse the cached
+# image so only app restarts are quick.
+sudo -u ec2-user bash -c "cd $APP_DIR && docker compose -f docker-compose.prod.yml up -d --build"
+
+echo "Dpeople stack is starting. Follow logs with:"
+echo "  cd $APP_DIR && docker compose -f docker-compose.prod.yml logs -f"
+echo
+echo "To seed the database (ONE-OFF):"
+echo "  cd $APP_DIR && RUN_SEED=true docker compose -f docker-compose.prod.yml run --rm app npx tsx prisma/seed.ts"

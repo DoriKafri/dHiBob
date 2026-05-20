@@ -10,9 +10,12 @@
   --color-charcoal: #3A3A37;
 }
 
-body { font-family: 'Inter', sans-serif; color: var(--color-charcoal); }
+body { 
+  font-family: 'Inter', sans-serif; 
+  @apply bg-white text-charcoal-900 dark:bg-charcoal-900 dark:text-white;
+}
 
-.card { @apply bg-white rounded-xl shadow-md p-6 border border-gray-100; }
+.card { @apply bg-white dark:bg-charcoal-800 rounded-xl shadow-md p-6 border border-gray-100 dark:border-charcoal-700; }
 .btn-primary { @apply inline-flex items-center justify-center px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 font-semibold; }
 
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -23,3 +26,10 @@ body { font-family: 'Inter', sans-serif; color: var(--color-charcoal); }
 ::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-track { background: #f3f3f2; }
 ::-webkit-scrollbar-thumb { background: #bfbfbb; border-radius: 4px; }
+
+@layer utilities {
+  .stripe-bg {
+    background-image: linear-gradient(45deg, rgba(255,255,255,0.15) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.15) 75%, transparent 75%, transparent);
+    background-size: 10px 10px;
+  }
+}
