@@ -29,7 +29,7 @@ function moveCandidate(
 ): any {
   if (!validateStageTransition(candidate.stage, newStage)) {
     throw new Error(
-      \`Invalid transition from \${candidate.stage} to \${newStage}\`
+      `Invalid transition from ${candidate.stage} to ${newStage}`
     );
   }
 
@@ -38,7 +38,7 @@ function moveCandidate(
     stage: newStage,
     lastMovedAt: new Date(),
     lastMovedBy: movedBy,
-    notes: notes ? \`\${candidate.notes || ''}\n\${notes}\` : candidate.notes,
+    notes: notes ? `${candidate.notes || ''}\n${notes}` : candidate.notes,
   };
 }
 
@@ -441,7 +441,7 @@ describe('Hiring Pipeline Service', () => {
           candidate,
           stage,
           'user-123',
-          \`Step \${index + 1}\`
+          `Step ${index + 1}`
         );
       });
 
